@@ -1,3 +1,4 @@
+localtunnel
 flask==3.0.0
 pyngrok==5.2.2
 pyTelegramBotAPI==4.11.0
