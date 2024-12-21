@@ -1,3 +1,4 @@
-flask==3.0.0
-pyngrok==5.2.2
-pyTelegramBotAPI==4.11.0
+Flask==2.3.0
+python-telegram-bot==20.0
+psutil==5.9.4
+schedule==1.1.0
