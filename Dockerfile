@@ -1,20 +1,22 @@
-# Use Python base image
-FROM python:3.10-slim
+# Use the official Python image from Docker Hub
+FROM python:3.9-slim
 
-# Set working directory
+# Set the working directory inside the container
 WORKDIR /app
 
-# Install Node.js (required for localtunnel) and curl to fetch Node.js setup script
-RUN apt-get update && apt-get install -y \
-    curl \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs
+# Copy the local requirements.txt to the container
+COPY requirements.txt /app/
 
-# Install localtunnel globally
-RUN npm install -g localtunnel
+# Install the dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the project files into the container
-COPY . .
+# Copy the rest of the application files to the container
+COPY . /app/
+
+# Expose the Flask app port
+EXPOSE 5000
+
+# Run the Flask app and the Telegram bot
 
 # Install Python dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
