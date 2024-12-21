@@ -3,8 +3,8 @@ import telebot
 import logging
 from flask import Flask, send_from_directory
 from threading import Thread
-from pyngrok import ngrok
 from datetime import datetime
+import subprocess
 
 # Telegram Bot Configuration
 BOT_TOKEN = '7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4'  # Replace with your token
@@ -35,7 +35,23 @@ def index():
 def serve_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
-# Telegram Bot Handlers
+# Function to start Localtunnel and get the public URL
+def start_localtunnel():
+    global public_url
+    try:
+        # Start Localtunnel on port 5000
+        result = subprocess.Popen(['lt', '--port', '5000'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = result.communicate()
+        if result.returncode == 0:
+            public_url = out.decode().strip()  # Get public URL
+            print(f"🌍 Localtunnel URL: {public_url}")
+        else:
+            print(f"🚫 Error starting Localtunnel: {err.decode()}")
+    except Exception as e:
+        print(f"❌ Error with Localtunnel: {e}")
+
+# Telegram Bot Handlers (Admin Commands)
+
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     if str(message.chat.id) != ADMIN_CHAT_ID:
@@ -60,14 +76,10 @@ def send_help(message):
 3. **/logs** - Retrieve server logs.
 4. **/status** - Check server status.
 5. **/stop** - Stop the server and bot.
-6. **/files** - List all hosted files.
-7. **/remove** - Remove a hosted file.
+6. **/listfiles** - List all hosted files.
+7. **/stopfile <filename>** - Stop hosting a specific file.
+8. **/remove** - Remove a hosted file.
    - Format: `/remove <filename>`
-
-📂 **How to Use**:
-1. Upload an HTML file to host it online.
-2. Get a public link to access your hosted file.
-3. Use `/logs` to view the server logs.
 """
     bot.reply_to(message, help_text)
 
@@ -92,7 +104,7 @@ def send_status(message):
         status_text += f"\n📂 Active hosted files: {len(active_hosted_files)}"
     bot.reply_to(message, status_text)
 
-@bot.message_handler(commands=["files"])
+@bot.message_handler(commands=["listfiles"])
 def list_files(message):
     if str(message.chat.id) != ADMIN_CHAT_ID:
         bot.reply_to(message, "🚫 Access denied! Only the admin can use this bot.")
@@ -102,6 +114,21 @@ def list_files(message):
         bot.reply_to(message, f"📂 Hosted Files:\n{file_list}")
     else:
         bot.reply_to(message, "🚫 No files are currently hosted.")
+
+@bot.message_handler(commands=["stopfile"])
+def stop_file(message):
+    if str(message.chat.id) != ADMIN_CHAT_ID:
+        bot.reply_to(message, "🚫 Access denied! Only the admin can use this bot.")
+        return
+    try:
+        _, filename = message.text.split(" ", 1)
+        if filename in active_hosted_files:
+            del active_hosted_files[filename]
+            bot.reply_to(message, f"✅ File `{filename}` stopped successfully from hosting.")
+        else:
+            bot.reply_to(message, "🚫 File not found in the active hosted list.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error stopping file: {e}")
 
 @bot.message_handler(commands=["remove"])
 def remove_file(message):
@@ -113,7 +140,8 @@ def remove_file(message):
         filepath = os.path.join(UPLOAD_FOLDER, filename)
         if os.path.exists(filepath):
             os.remove(filepath)
-            active_hosted_files.pop(filename, None)
+            if filename in active_hosted_files:
+                del active_hosted_files[filename]
             bot.reply_to(message, f"✅ File `{filename}` removed successfully.")
         else:
             bot.reply_to(message, "🚫 File not found.")
@@ -150,10 +178,10 @@ def handle_document(message):
 
         bot.reply_to(message, f"✅ File `{message.document.file_name}` uploaded successfully! Hosting it now...")
 
-        # Host the file using Flask and Ngrok
+        # Host the file using Flask and Localtunnel
         global public_url
         if not public_url:
-            public_url = ngrok.connect(5000).public_url
+            start_localtunnel()  # Start Localtunnel to get the public URL
         file_url = f"{public_url}/{message.document.file_name}"
         active_hosted_files[message.document.file_name] = file_url
 
