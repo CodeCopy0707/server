@@ -7,8 +7,8 @@ from datetime import datetime
 from collections import deque
 
 # Telegram Bot Configuration
-API_TOKEN = "YOUR_TELEGRAM_BOT_API_TOKEN"  # Replace with your Telegram bot API token
-CHAT_ID = "YOUR_CHAT_ID"  # Replace with your Telegram chat ID
+API_TOKEN = ""  # Replace with your Telegram bot API token
+CHAT_ID = ""  # Replace with your Telegram chat ID
 bot = telebot.TeleBot(API_TOKEN)
 
 # Log file path
@@ -17,7 +17,7 @@ clients = set()  # Active WebSocket clients
 command_history = deque(maxlen=100)  # Keeps last 100 commands
 
 # Authentication
-VALID_TOKENS = {"your_valid_token_here"}  # List of valid tokens for client authentication
+VALID_TOKENS = {"token123", "secureToken456", "clientABC789"}
 
 # --- File Handling ---
 # Save data to a file
