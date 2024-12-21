@@ -1,15 +1,12 @@
-
-
 import os
 import time
 import logging
-from flask import Flask, send_from_directory
-from telegram import Update, Bot
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import threading
-import schedule
-import psutil
 import datetime
+import psutil
+import telebot
+from flask import Flask, send_from_directory
+import schedule
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -52,113 +49,141 @@ def convert_to_html(file_path):
     
     return html_file_path
 
-# Start the bot
-def start_bot(token):
-    updater = Updater(token, use_context=True)
-    dispatcher = updater.dispatcher
-    
-    def start(update, context):
-        update.message.reply_text("Welcome! Use /help to see available commands.")
-    
-    def help(update, context):
-        commands = """
-        /start - Start the bot and get a welcome message.
-        /help - Get a list of available commands.
-        /logs - Retrieve server logs.
-        /uploadlog - Upload logs as a file.
-        /clearlogs - Clear the server logs.
-        /status - Check server status.
-        /uptime - Check server uptime.
-        /restart - Restart the bot and server.
-        /listfiles - List all hosted files.
-        /stopfile <filename> - Stop hosting a specific file.
-        /remove <filename> - Remove a hosted file.
-        """
-        update.message.reply_text(commands)
+# Initialize the TeleBot with your bot token
+TOKEN = '7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4'
+bot = telebot.TeleBot(TOKEN)
 
-    def logs(update, context):
-        with open(log_file, 'r') as log:
-            logs = log.read()
-        update.message.reply_text(logs)
+# Function to handle /start command
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, "Welcome! Use /help to see available commands.")
 
-    def uploadlog(update, context):
-        with open(log_file, 'r') as log:
-            update.message.reply_document(document=log, filename="server_logs.txt")
-    
-    def clearlogs(update, context):
-        if update.message.chat_id == ADMIN_CHAT_ID:
-            with open(log_file, 'w') as log:
-                log.write("Server logs cleared.\n")
-            update.message.reply_text("Logs cleared successfully.")
-        else:
-            update.message.reply_text("You do not have permission to clear logs.")
-    
-    def status(update, context):
-        status_message = "Server is running."
-        update.message.reply_text(status_message)
-    
-    def uptime(update, context):
-        uptime = datetime.timedelta(seconds=int(time.time() - psutil.boot_time()))
-        update.message.reply_text(f"Server uptime: {str(uptime)}")
-    
-    def restart(update, context):
-        if update.message.chat_id == ADMIN_CHAT_ID:
-            update.message.reply_text("Restarting bot and server...")
-            os._exit(0)  # Restart the bot (ends the process, which restarts the bot)
-        else:
-            update.message.reply_text("You do not have permission to restart the bot.")
-    
-    def listfiles(update, context):
-        files = os.listdir(html_folder)
-        if files:
-            update.message.reply_text("\n".join(files))
-        else:
-            update.message.reply_text("No files are currently hosted.")
+# Function to handle /help command
+@bot.message_handler(commands=['help'])
+def help(message):
+    commands = """
+    /start - Start the bot and get a welcome message.
+    /help - Get a list of available commands.
+    /logs - Retrieve server logs.
+    /uploadlog - Upload logs as a file.
+    /clearlogs - Clear the server logs.
+    /status - Check server status.
+    /uptime - Check server uptime.
+    /restart - Restart the bot and server.
+    /listfiles - List all hosted files.
+    /stopfile <filename> - Stop hosting a specific file.
+    /remove <filename> - Remove a hosted file.
+    /upload <file> - Upload a file to host as HTML.
+    """
+    bot.reply_to(message, commands)
 
-    def stopfile(update, context):
-        if update.message.chat_id == ADMIN_CHAT_ID:
-            filename = " ".join(context.args)
-            if filename:
-                file_path = os.path.join(html_folder, filename)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    update.message.reply_text(f"File {filename} has been stopped from hosting.")
-                else:
-                    update.message.reply_text(f"File {filename} not found.")
+# Function to handle /logs command
+@bot.message_handler(commands=['logs'])
+def logs(message):
+    with open(log_file, 'r') as log:
+        logs_content = log.read()
+    bot.reply_to(message, logs_content)
+
+# Function to handle /uploadlog command
+@bot.message_handler(commands=['uploadlog'])
+def uploadlog(message):
+    with open(log_file, 'r') as log:
+        bot.send_document(message.chat.id, log, caption="server_logs.txt")
+
+# Function to handle /clearlogs command
+@bot.message_handler(commands=['clearlogs'])
+def clearlogs(message):
+    if message.chat.id == ADMIN_CHAT_ID:
+        with open(log_file, 'w') as log:
+            log.write("Server logs cleared.\n")
+        bot.reply_to(message, "Logs cleared successfully.")
+    else:
+        bot.reply_to(message, "You do not have permission to clear logs.")
+
+# Function to handle /status command
+@bot.message_handler(commands=['status'])
+def status(message):
+    bot.reply_to(message, "Server is running.")
+
+# Function to handle /uptime command
+@bot.message_handler(commands=['uptime'])
+def uptime(message):
+    uptime = datetime.timedelta(seconds=int(time.time() - psutil.boot_time()))
+    bot.reply_to(message, f"Server uptime: {str(uptime)}")
+
+# Function to handle /restart command
+@bot.message_handler(commands=['restart'])
+def restart(message):
+    if message.chat.id == ADMIN_CHAT_ID:
+        bot.reply_to(message, "Restarting bot and server...")
+        os._exit(0)  # Restart the bot
+    else:
+        bot.reply_to(message, "You do not have permission to restart the bot.")
+
+# Function to handle /listfiles command
+@bot.message_handler(commands=['listfiles'])
+def listfiles(message):
+    files = os.listdir(html_folder)
+    if files:
+        bot.reply_to(message, "\n".join(files))
+    else:
+        bot.reply_to(message, "No files are currently hosted.")
+
+# Function to handle /stopfile command
+@bot.message_handler(commands=['stopfile'])
+def stopfile(message):
+    if message.chat.id == ADMIN_CHAT_ID:
+        filename = message.text.split(' ', 1)[1]
+        if filename:
+            file_path = os.path.join(html_folder, filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                bot.reply_to(message, f"File {filename} has been stopped from hosting.")
             else:
-                update.message.reply_text("Please specify a filename.")
+                bot.reply_to(message, f"File {filename} not found.")
         else:
-            update.message.reply_text("You do not have permission to stop hosting files.")
-    
-    def remove(update, context):
-        if update.message.chat_id == ADMIN_CHAT_ID:
-            filename = " ".join(context.args)
-            if filename:
-                file_path = os.path.join(html_folder, filename)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    update.message.reply_text(f"File {filename} has been removed.")
-                else:
-                    update.message.reply_text(f"File {filename} not found.")
-            else:
-                update.message.reply_text("Please specify a filename.")
-        else:
-            update.message.reply_text("You do not have permission to remove files.")
-    
-    # Register command handlers
-    dispatcher.add_handler(CommandHandler('start', start))
-    dispatcher.add_handler(CommandHandler('help', help))
-    dispatcher.add_handler(CommandHandler('logs', logs))
-    dispatcher.add_handler(CommandHandler('uploadlog', uploadlog))
-    dispatcher.add_handler(CommandHandler('clearlogs', clearlogs))
-    dispatcher.add_handler(CommandHandler('status', status))
-    dispatcher.add_handler(CommandHandler('uptime', uptime))
-    dispatcher.add_handler(CommandHandler('restart', restart))
-    dispatcher.add_handler(CommandHandler('listfiles', listfiles))
-    dispatcher.add_handler(CommandHandler('stopfile', stopfile))
-    dispatcher.add_handler(CommandHandler('remove', remove))
+            bot.reply_to(message, "Please specify a filename.")
+    else:
+        bot.reply_to(message, "You do not have permission to stop hosting files.")
 
-    updater.start_polling()
+# Function to handle /remove command
+@bot.message_handler(commands=['remove'])
+def remove(message):
+    if message.chat.id == ADMIN_CHAT_ID:
+        filename = message.text.split(' ', 1)[1]
+        if filename:
+            file_path = os.path.join(html_folder, filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                bot.reply_to(message, f"File {filename} has been removed.")
+            else:
+                bot.reply_to(message, f"File {filename} not found.")
+        else:
+            bot.reply_to(message, "Please specify a filename.")
+    else:
+        bot.reply_to(message, "You do not have permission to remove files.")
+
+# Function to handle /upload command
+@bot.message_handler(commands=['upload'])
+def upload(message):
+    if message.chat.id == ADMIN_CHAT_ID:
+        if message.document:
+            file = message.document
+            file_path = f"./uploads/{file.file_name}"
+
+            # Download the file
+            file.download(file_path)
+
+            # Convert the file to HTML
+            if file.file_name.endswith('.txt'):
+                html_file = convert_to_html(file_path)
+                bot.reply_to(message, f"File uploaded and converted to HTML. You can access it at: http://<your-server-ip>:5000/{os.path.basename(html_file)}")
+            else:
+                bot.reply_to(message, "Only .txt files are supported for conversion to HTML.")
+        else:
+            bot.reply_to(message, "Please upload a file to host.")
+    else:
+        bot.reply_to(message, "You do not have permission to upload files.")
 
 # Timer-based functionality to stop the server
 def stop_server():
@@ -175,11 +200,8 @@ if __name__ == '__main__':
     flask_thread.daemon = True
     flask_thread.start()
 
-    # Telegram Bot Token (replace with your actual bot token)
-    token = '7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4'
-    
-    # Start Telegram bot in the main thread
-    bot_thread = threading.Thread(target=start_bot, args=(token,))
+    # Start the Telegram bot in the main thread
+    bot_thread = threading.Thread(target=bot.polling)
     bot_thread.daemon = True
     bot_thread.start()
 
