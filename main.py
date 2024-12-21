@@ -7,9 +7,9 @@ from datetime import datetime
 from collections import deque
 
 # Telegram Bot Configuration
-API_TOKEN = ""  # Replace with your Telegram bot API token
+# API_TOKEN = ""  # Replace with your Telegram bot API token
 CHAT_ID = ""  # Replace with your Telegram chat ID
-bot = telebot.TeleBot(API_TOKEN)
+bot = telebot.TeleBot('7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4')
 
 # Log file path
 LOG_FILE = "logs/logs.txt"
