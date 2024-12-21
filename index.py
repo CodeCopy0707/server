@@ -7,8 +7,8 @@ from pyngrok import ngrok
 from datetime import datetime
 
 # Telegram Bot Configuration
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"  # Replace with your token
-ADMIN_CHAT_ID = "YOUR_ADMIN_CHAT_ID"  # Replace with your Telegram chat ID
+BOT_TOKEN = '7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4'  # Replace with your token
+ADMIN_CHAT_ID = "7416312733"  # Replace with your Telegram chat ID
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Flask App Configuration
