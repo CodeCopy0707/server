@@ -3,10 +3,11 @@ import telebot
 import logging
 from flask import Flask, send_from_directory
 from threading import Thread
-from datetime import datetime
+from datetime import datetime, timedelta
 import subprocess
+import time
 
-# Telegram Bot Configuration  # Replace with your token
+# Telegram Bot Configuration
 ADMIN_CHAT_ID = "7416312733"  # Replace with your Telegram chat ID
 bot = telebot.TeleBot('7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4')
 
@@ -24,6 +25,7 @@ logging.basicConfig(level=logging.INFO, filename=log_file, filemode="w")
 # Global Variables
 active_hosted_files = {}
 public_url = None
+start_time = datetime.now()
 
 # Flask Routes
 @app.route("/")
@@ -38,19 +40,19 @@ def serve_file(filename):
 def start_localtunnel():
     global public_url
     try:
-        # Start Localtunnel on port 5000
-        result = subprocess.Popen(['lt', '--port', '5000'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, err = result.communicate()
-        if result.returncode == 0:
-            public_url = out.decode().strip()  # Get public URL
-            print(f"🌍 Localtunnel URL: {public_url}")
+        port = int(os.getenv("PORT", 5000))  # Use dynamic port binding
+        result = subprocess.Popen(['lt', '--port', str(port)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        for line in iter(result.stdout.readline, b""):
+            if b"your url is" in line:
+                public_url = line.decode().strip().split()[-1]
+                print(f"🌍 Localtunnel URL: {public_url}")
+                break
         else:
-            print(f"🚫 Error starting Localtunnel: {err.decode()}")
+            print("🚫 Localtunnel failed to start.")
     except Exception as e:
         print(f"❌ Error with Localtunnel: {e}")
 
 # Telegram Bot Handlers (Admin Commands)
-
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     if str(message.chat.id) != ADMIN_CHAT_ID:
@@ -73,12 +75,14 @@ def send_help(message):
 1. **/start** - Start the bot and get a welcome message.
 2. **/help** - Get a list of available commands.
 3. **/logs** - Retrieve server logs.
-4. **/status** - Check server status.
-5. **/stop** - Stop the server and bot.
-6. **/listfiles** - List all hosted files.
-7. **/stopfile <filename>** - Stop hosting a specific file.
-8. **/remove** - Remove a hosted file.
-   - Format: `/remove <filename>`
+4. **/uploadlog** - Upload logs as a file.
+5. **/clearlogs** - Clear the server logs.
+6. **/status** - Check server status.
+7. **/uptime** - Check server uptime.
+8. **/restart** - Restart the bot and server.
+9. **/listfiles** - List all hosted files.
+10. **/stopfile <filename>** - Stop hosting a specific file.
+11. **/remove <filename>** - Remove a hosted file.
 """
     bot.reply_to(message, help_text)
 
@@ -93,6 +97,40 @@ def send_logs(message):
     else:
         bot.reply_to(message, "🚫 No logs found.")
 
+@bot.message_handler(commands=["uploadlog"])
+def upload_log_file(message):
+    if os.path.exists(log_file):
+        with open(log_file, "rb") as f:
+            bot.send_document(message.chat.id, f, caption="📜 Server Logs")
+    else:
+        bot.reply_to(message, "🚫 No logs to upload.")
+
+@bot.message_handler(commands=["clearlogs"])
+def clear_logs(message):
+    global log_file
+    if str(message.chat.id) != ADMIN_CHAT_ID:
+        bot.reply_to(message, "🚫 Access denied! Only the admin can use this bot.")
+        return
+    with open(log_file, "w") as f:
+        f.truncate(0)  # Clear log file
+    bot.reply_to(message, "🧹 Server logs cleared.")
+
+@bot.message_handler(commands=["uptime"])
+def send_uptime(message):
+    if str(message.chat.id) != ADMIN_CHAT_ID:
+        bot.reply_to(message, "🚫 Access denied! Only the admin can use this bot.")
+        return
+    uptime = datetime.now() - start_time
+    bot.reply_to(message, f"⏱ Uptime: {str(uptime).split('.')[0]}")
+
+@bot.message_handler(commands=["restart"])
+def restart_bot(message):
+    if str(message.chat.id) != ADMIN_CHAT_ID:
+        bot.reply_to(message, "🚫 Access denied! Only the admin can use this bot.")
+        return
+    bot.reply_to(message, "🔄 Restarting bot...")
+    os.execl(sys.executable, sys.executable, *sys.argv)
+
 @bot.message_handler(commands=["status"])
 def send_status(message):
     if str(message.chat.id) != ADMIN_CHAT_ID:
@@ -101,6 +139,8 @@ def send_status(message):
     status_text = "✅ The server is running and ready to host files."
     if active_hosted_files:
         status_text += f"\n📂 Active hosted files: {len(active_hosted_files)}"
+    if public_url:
+        status_text += f"\n🌐 Public URL: {public_url}"
     bot.reply_to(message, status_text)
 
 @bot.message_handler(commands=["listfiles"])
@@ -116,9 +156,6 @@ def list_files(message):
 
 @bot.message_handler(commands=["stopfile"])
 def stop_file(message):
-    if str(message.chat.id) != ADMIN_CHAT_ID:
-        bot.reply_to(message, "🚫 Access denied! Only the admin can use this bot.")
-        return
     try:
         _, filename = message.text.split(" ", 1)
         if filename in active_hosted_files:
@@ -129,65 +166,26 @@ def stop_file(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Error stopping file: {e}")
 
-@bot.message_handler(commands=["remove"])
-def remove_file(message):
-    if str(message.chat.id) != ADMIN_CHAT_ID:
-        bot.reply_to(message, "🚫 Access denied! Only the admin can use this bot.")
-        return
-    try:
-        _, filename = message.text.split(" ", 1)
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-            if filename in active_hosted_files:
-                del active_hosted_files[filename]
-            bot.reply_to(message, f"✅ File `{filename}` removed successfully.")
-        else:
-            bot.reply_to(message, "🚫 File not found.")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error removing file: {e}")
-
-@bot.message_handler(commands=["stop"])
-def stop_server(message):
-    if str(message.chat.id) != ADMIN_CHAT_ID:
-        bot.reply_to(message, "🚫 Access denied! Only the admin can use this bot.")
-        return
-    bot.reply_to(message, "🛑 Stopping the server and bot...")
-    os._exit(0)
-
 @bot.message_handler(content_types=["document"])
 def handle_document(message):
-    if str(message.chat.id) != ADMIN_CHAT_ID:
-        bot.reply_to(message, "🚫 Access denied! Only the admin can use this bot.")
-        return
     try:
-        # Check if the uploaded file is HTML
         file_info = bot.get_file(message.document.file_id)
         file_extension = message.document.file_name.split(".")[-1].lower()
-
         if file_extension != "html":
             bot.reply_to(message, "🚫 Only HTML files are allowed!")
             return
-
-        # Save the file
         file_path = os.path.join(UPLOAD_FOLDER, message.document.file_name)
         downloaded_file = bot.download_file(file_info.file_path)
         with open(file_path, "wb") as f:
             f.write(downloaded_file)
-
         bot.reply_to(message, f"✅ File `{message.document.file_name}` uploaded successfully! Hosting it now...")
-
-        # Host the file using Flask and Localtunnel
         global public_url
         if not public_url:
-            start_localtunnel()  # Start Localtunnel to get the public URL
+            start_localtunnel()
         file_url = f"{public_url}/{message.document.file_name}"
         active_hosted_files[message.document.file_name] = file_url
-
         bot.reply_to(message, f"🌐 Your file is hosted at: {file_url}")
-
-        # Start Flask server in a separate thread
-        Thread(target=app.run, kwargs={"port": 5000}).start()
+        Thread(target=app.run, kwargs={"port": int(os.getenv("PORT", 5000))}).start()
     except Exception as e:
         bot.reply_to(message, f"❌ Error processing your file: {e}")
 
