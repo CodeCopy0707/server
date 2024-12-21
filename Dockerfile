@@ -1,31 +1,21 @@
-# Use the official Python image from Docker Hub
-FROM python:3.9-slim
+# Use an official Python runtime as a parent image
+FROM python:3.10-slim
 
-# Install Node.js and npm (required for LocalTunnel)
-RUN apt-get update && apt-get install -y \
-    curl \
-    gnupg2 \
-    lsb-release \
-    && curl -fsSL https://deb.nodesource.com/setup_16.x | bash - \
-    && apt-get install -y nodejs
-
-# Set the working directory inside the container
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy the local requirements.txt to the container
-COPY requirements.txt /app/
+# Copy the current directory contents into the container at /app
+COPY . /app
 
-# Install Python dependencies
+# Install any necessary dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install LocalTunnel globally
-RUN npm install -g localtunnel
-
-# Copy the rest of the application files to the container
-COPY . /app/
-
-# Expose the Flask app port (5000)
+# Expose port 5000 (for Flask)
 EXPOSE 5000
 
-# Command to start the Flask server and localtunnel (without subdomain)
-CMD ["sh", "-c", "python index.py & lt --port 5000"]
+# Define environment variable for Flask to run in production
+ENV FLASK_APP=app.py
+ENV FLASK_RUN_HOST=0.0.0.0
+
+# Command to run the Flask app and bot
+CMD ["sh", "-c", "python app.py & python index.py"]
