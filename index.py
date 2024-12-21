@@ -6,10 +6,9 @@ from threading import Thread
 from datetime import datetime
 import subprocess
 
-# Telegram Bot Configuration
-BOT_TOKEN = '7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4'  # Replace with your token
+# Telegram Bot Configuration  # Replace with your token
 ADMIN_CHAT_ID = "7416312733"  # Replace with your Telegram chat ID
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot('7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4')
 
 # Flask App Configuration
 UPLOAD_FOLDER = "uploads"
