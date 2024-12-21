@@ -1,21 +1,17 @@
-# Use an official Python runtime as a parent image
+# Use Python base image
 FROM python:3.10-slim
 
-# Set the working directory in the container
+# Set working directory
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+# Copy the project files into the container
+COPY . .
 
-# Install any required Python packages
-RUN pip install --no-cache-dir requests
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose the port that the server will listen on
-EXPOSE 4444
+# Expose the port Flask will run on
+EXPOSE 5000
 
-# Set environment variables to prevent Python from writing .pyc files and buffering output
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# Command to run the application
-CMD ["python", "main.py"]
+# Command to start the bot and Flask server
+CMD ["python", "index.py"]
