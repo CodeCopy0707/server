@@ -1,0 +1,11 @@
+name: telegram-hosting-bot
+services:
+  - name: html-hosting-service
+    image:
+      name: docker.io/your-dockerhub-username/telegram-hosting-bot:latest
+    ports:
+      - 5000
+    routes:
+      - name: public-route
+        path: /
+        port: 5000
